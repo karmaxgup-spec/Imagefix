@@ -1,12 +1,12 @@
 import { extension_settings } from "../../../extensions.js";
 import { eventSource, event_types } from "../../../script.js";
+import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
 
 // Default extension settings
 const defaultSettings = {
     enabled: true,
     triggerKeywords: ["messy bedroom", "skirt", "seductive", "tshirt"],
     defaultTags: "masterpiece, best quality, highres, photorealistic",
-    negativePrompt: "lowres, bad anatomy, bad hands, text, error, missing fingers"
 };
 
 // Track the last generated prompt to prevent consecutive duplicates
@@ -18,21 +18,24 @@ async function loadSettings() {
     }
 }
 
-// Function to execute the slash command in SillyTavern
+// Function to execute the slash command using SillyTavern's official parser
 async function triggerSDCommand(sdPrompt) {
     const fullCommand = `/sd ${sdPrompt}`;
     console.log(`[Auto SD Trigger] Executing: ${fullCommand}`);
     
-    // Check if SillyTavern's slash command parser is available
-    if (typeof window.executeSlashCommands === "function") {
-        await window.executeSlashCommands(fullCommand);
-    } else {
-        // Fallback: Dispatch into chat input if global function isn't exposed directly in your version
-        const chatInput = document.querySelector("#send_textarea");
-        if (chatInput) {
-            chatInput.value = fullCommand;
-            document.querySelector("#send_but")?.click();
+    try {
+        if (typeof SlashCommandParser.parse === "function") {
+            await SlashCommandParser.parse(fullCommand);
+        } else {
+            // Fallback UI simulation if parser isn't directly reachable
+            const chatInput = document.querySelector("#send_textarea");
+            if (chatInput) {
+                chatInput.value = fullCommand;
+                document.querySelector("#send_but")?.click();
+            }
         }
+    } catch (error) {
+        console.error("[Auto SD Trigger] Failed to execute /sd command:", error);
     }
 }
 
@@ -75,5 +78,5 @@ eventSource.on(event_types.MESSAGE_RECEIVED, async (messageId) => {
 // Initialization
 jQuery(async () => {
     await loadSettings();
-    console.log("[Auto SD Trigger] Extension loaded successfully with duplicate protection.");
+    console.log("[Auto SD Trigger] Extension loaded successfully with SlashCommandParser integration.");
 });
