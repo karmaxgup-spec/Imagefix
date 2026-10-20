@@ -5,8 +5,9 @@ import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.j
 // Default extension settings
 const defaultSettings = {
     enabled: true,
-    triggerKeywords: ["messy bedroom", "skirt", "seductive", "tshirt"],
-    defaultTags: "masterpiece, best quality, highres, photorealistic",
+    // Regex to match format like: [Priya sent a picture that contains: RANDOM PROMPT]
+    triggerRegex: "\\[.*?(?:sent a picture that contains\vert{}picture contains):\\s*([^\\]]+)\\]",
+    defaultTags: "masterpiece, best quality, highres, photorealistic"
 };
 
 // Track the last generated prompt to prevent consecutive duplicates
@@ -27,7 +28,6 @@ async function triggerSDCommand(sdPrompt) {
         if (typeof SlashCommandParser.parse === "function") {
             await SlashCommandParser.parse(fullCommand);
         } else {
-            // Fallback UI simulation if parser isn't directly reachable
             const chatInput = document.querySelector("#send_textarea");
             if (chatInput) {
                 chatInput.value = fullCommand;
@@ -44,39 +44,43 @@ eventSource.on(event_types.MESSAGE_RECEIVED, async (messageId) => {
     const settings = extension_settings.auto_sd_trigger;
     if (!settings || !settings.enabled) return;
 
-    // Get the context to fetch the latest message
     const context = SillyTavern.getContext();
     const message = context.chat[messageId];
 
     if (!message || message.is_user) return;
 
-    const messageText = message.mes.toLowerCase();
+    const messageText = message.mes;
 
-    // Check if the message contains visual descriptions matching your criteria
-    const matchesKeyword = settings.triggerKeywords.some(keyword => messageText.includes(keyword));
+    try {
+        // Compile the regex to find the bracketed picture prompt
+        const regex = new RegExp(settings.triggerRegex, "i");
+        const match = messageText.match(regex);
 
-    if (matchesKeyword) {
-        // Construct the Stable Diffusion prompt
-        let generatedPrompt = "1girl, solo, standing in a messy bedroom, wearing a black t-shirt and black pleated skirt, pulling up skirt to reveal thighs, seductive expression, detailed background, dramatic lighting";
-        
-        if (settings.defaultTags) {
-            generatedPrompt += `, ${settings.defaultTags}`;
+        if (match && match[1]) {
+            // Extract the "RANDOM PROMPT" portion
+            let generatedPrompt = match[1].trim();
+            
+            if (settings.defaultTags) {
+                generatedPrompt += `, ${settings.defaultTags}`;
+            }
+            
+            // **Duplicate Prevention Check**
+            if (generatedPrompt === lastGeneratedPrompt) {
+                console.log("[Auto SD Trigger] Duplicate prompt detected consecutively. Skipping image generation.");
+                return;
+            }
+
+            // Update tracker and trigger command
+            lastGeneratedPrompt = generatedPrompt;
+            await triggerSDCommand(generatedPrompt);
         }
-        
-        // **Duplicate Prevention Check**
-        if (generatedPrompt === lastGeneratedPrompt) {
-            console.log("[Auto SD Trigger] Duplicate prompt detected consecutively. Skipping image generation.");
-            return;
-        }
-
-        // Update the tracker with the current prompt and trigger the command
-        lastGeneratedPrompt = generatedPrompt;
-        await triggerSDCommand(generatedPrompt);
+    } catch (e) {
+        console.error("[Auto SD Trigger] Invalid Regex pattern:", e);
     }
 });
 
 // Initialization
 jQuery(async () => {
     await loadSettings();
-    console.log("[Auto SD Trigger] Extension loaded successfully with SlashCommandParser integration.");
+    console.log("[Auto SD Trigger] Extension loaded successfully with bracketed prompt matching.");
 });
