@@ -1,0 +1,6 @@
+{
+  "display_name": "Auto SD Visual Trigger",
+  "version": "1.0.0",
+  "author": "Custom",
+  "description": "Automatically runs a /sd command based on visual descriptions or keywords in incoming character messages."
+}
