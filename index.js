@@ -2,15 +2,11 @@ import { extension_settings } from "../../../extensions.js";
 import { eventSource, event_types } from "../../../script.js";
 import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
 
-// Default extension settings
 const defaultSettings = {
     enabled: true,
-    // Regex to match format like: [Priya sent a picture that contains: RANDOM PROMPT]
-    triggerRegex: "\\[.*?(?:sent a picture that contains\vert{}picture contains):\\s*([^\\]]+)\\]",
     defaultTags: "masterpiece, best quality, highres, photorealistic"
 };
 
-// Track the last generated prompt to prevent consecutive duplicates
 let lastGeneratedPrompt = "";
 
 async function loadSettings() {
@@ -19,7 +15,6 @@ async function loadSettings() {
     }
 }
 
-// Function to execute the slash command using SillyTavern's official parser
 async function triggerSDCommand(sdPrompt) {
     const fullCommand = `/sd ${sdPrompt}`;
     console.log(`[Auto SD Trigger] Executing: ${fullCommand}`);
@@ -39,7 +34,6 @@ async function triggerSDCommand(sdPrompt) {
     }
 }
 
-// Listen for incoming messages
 eventSource.on(event_types.MESSAGE_RECEIVED, async (messageId) => {
     const settings = extension_settings.auto_sd_trigger;
     if (!settings || !settings.enabled) return;
@@ -50,37 +44,34 @@ eventSource.on(event_types.MESSAGE_RECEIVED, async (messageId) => {
     if (!message || message.is_user) return;
 
     const messageText = message.mes;
+    console.log("[Auto SD Trigger] Scanning incoming message:", messageText);
 
-    try {
-        // Compile the regex to find the bracketed picture prompt
-        const regex = new RegExp(settings.triggerRegex, "i");
-        const match = messageText.match(regex);
+    // Pure Regex to match brackets containing "contains:" and capture everything after it
+    const regex = /\[[^\]]*?contains:\s*([^\]]+)\]/i;
+    const match = messageText.match(regex);
 
-        if (match && match[1]) {
-            // Extract the "RANDOM PROMPT" portion
-            let generatedPrompt = match[1].trim();
-            
-            if (settings.defaultTags) {
-                generatedPrompt += `, ${settings.defaultTags}`;
-            }
-            
-            // **Duplicate Prevention Check**
-            if (generatedPrompt === lastGeneratedPrompt) {
-                console.log("[Auto SD Trigger] Duplicate prompt detected consecutively. Skipping image generation.");
-                return;
-            }
-
-            // Update tracker and trigger command
-            lastGeneratedPrompt = generatedPrompt;
-            await triggerSDCommand(generatedPrompt);
+    if (match && match[1]) {
+        let generatedPrompt = match[1].trim();
+        console.log("[Auto SD Trigger] Successfully extracted prompt:", generatedPrompt);
+        
+        if (settings.defaultTags) {
+            generatedPrompt += `, ${settings.defaultTags}`;
         }
-    } catch (e) {
-        console.error("[Auto SD Trigger] Invalid Regex pattern:", e);
+        
+        // Duplicate Prevention Check (won't trigger twice in a row)
+        if (generatedPrompt === lastGeneratedPrompt) {
+            console.log("[Auto SD Trigger] Duplicate prompt detected consecutively. Skipping image generation.");
+            return;
+        }
+
+        lastGeneratedPrompt = generatedPrompt;
+        await triggerSDCommand(generatedPrompt);
+    } else {
+        console.log("[Auto SD Trigger] No matching bracket pattern found.");
     }
 });
 
-// Initialization
 jQuery(async () => {
     await loadSettings();
-    console.log("[Auto SD Trigger] Extension loaded successfully with bracketed prompt matching.");
+    console.log("[Auto SD Trigger] Extension loaded successfully with pure regex.");
 });
